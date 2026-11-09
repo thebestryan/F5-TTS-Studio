@@ -1,278 +1,280 @@
-# F5-TTS: A Fairytaler that Fakes Fluent and Faithful Speech with Flow Matching
+# F5-TTS Studio
 
-[![python](https://img.shields.io/badge/Python-3.10-brightgreen)](https://github.com/SWivid/F5-TTS)
-[![arXiv](https://img.shields.io/badge/arXiv-2410.06885-b31b1b.svg?logo=arXiv)](https://arxiv.org/abs/2410.06885)
-[![demo](https://img.shields.io/badge/GitHub-Demo-orange.svg)](https://swivid.github.io/F5-TTS/)
-[![hfspace](https://img.shields.io/badge/🤗-HF%20Space-yellow)](https://huggingface.co/spaces/mrfakename/E2-F5-TTS)
-[![msspace](https://img.shields.io/badge/🤖-MS%20Space-blue)](https://modelscope.cn/studios/AI-ModelScope/E2-F5-TTS)
-[![lab](https://img.shields.io/badge/🏫-X--LANCE-grey?labelColor=lightgrey)](https://x-lance.sjtu.edu.cn/)
-[![lab](https://img.shields.io/badge/🏫-SII-grey?labelColor=lightgrey)](https://www.sii.edu.cn/)
-[![lab](https://img.shields.io/badge/🏫-PCL-grey?labelColor=lightgrey)](https://www.pcl.ac.cn)
-<!-- <img src="https://github.com/user-attachments/assets/12d7749c-071a-427c-81bf-b87b91def670" alt="Watermark" style="width: 40px; height: auto"> -->
+A local-first web studio for [F5-TTS](https://github.com/SWivid/F5-TTS), built for long-form speech.
 
-**F5-TTS**: Diffusion Transformer with ConvNeXt V2, faster trained and inference.
+F5-TTS is excellent at zero-shot voice cloning. The upstream project is a research/inference release with command-line tools and Gradio demos. This fork keeps the same model and inference stack, but wraps it in a studio designed around the way narration is actually made: load a short voice reference, split a long script, regenerate individual takes, then master the final mix.
 
-**E2 TTS**: Flat-UNet Transformer, closest reproduction from [paper](https://arxiv.org/abs/2406.18009).
+**Upstream model and training code:** [SWivid/F5-TTS](https://github.com/SWivid/F5-TTS)  
+**Studio frontend and tooling:** this fork, under `studio/`  
+**License:** MIT (see [LICENSE](LICENSE))
 
-**Sway Sampling**: Inference-time flow step sampling strategy, greatly improves performance
+![Python](https://img.shields.io/badge/python-3.11-blue)
+![FastAPI](https://img.shields.io/badge/FastAPI-backend-009688)
+![Frontend](https://img.shields.io/badge/frontend-vanilla%20JS-e3a85b)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-### Thanks to all the contributors !
+![F5-TTS Studio interface](docs/studio.png)
 
-## News
-- **2025/03/12**: 🔥 F5-TTS v1 base model with better training and inference performance. [Few demo](https://swivid.github.io/F5-TTS_updates).
-- **2024/10/08**: F5-TTS & E2 TTS base models on [🤗 Hugging Face](https://huggingface.co/SWivid/F5-TTS), [🤖 Model Scope](https://www.modelscope.cn/models/SWivid/F5-TTS_Emilia-ZH-EN), [🟣 Wisemodel](https://wisemodel.cn/models/SJTU_X-LANCE/F5-TTS_Emilia-ZH-EN).
+*A completed long-form session: reference waveform, four editable chunks, engine and mastering controls, and the assembled final mix.*
 
-## Installation
+## Highlights
 
-### Create a separate environment if needed
+- **Long-form first.** Scripts are split at sentence and paragraph boundaries into editable chunks. Generate the whole thing, cancel safely, resume later, or redo one bad take.
+- **Reference voice workflow.** Drag in audio, inspect the waveform, drag-select and trim to the strongest 4–12 seconds, type the transcript, or auto-transcribe it with Whisper.
+- **Per-chunk control.** Edit text, set an individual pause, mark emphasis, mute a chunk, play a take, or regenerate it with a new seed. Chunk edits are locked while a run is active so audio cannot drift from the text.
+- **Real engine controls.** NFE steps with Draft/Balanced/Quality presets, CFG strength, sway sampling, native generation speed, seed, and target RMS.
+- **Mastering controls.** Time-stretch speed, pitch shift in semitones with formant preservation, loudness normalization, silence trimming, crossfades, and emphasis gain.
+- **Persistent sessions.** Jobs, chunk WAVs, and finals live on disk. Reload the page or restart the server without losing work.
+- **Local by design.** FastAPI serves a custom single-page app on `127.0.0.1:7862`. No frontend build step, no cloud service, no account.
+- **WAV/MP3 export.** Download the mastered mix, or the raw stitched mix before post-processing.
 
-```bash
-# Create a conda env with python_version>=3.10  (you could also use virtualenv)
-conda create -n f5-tts python=3.11
-conda activate f5-tts
+## Quick start
 
-# Install FFmpeg if you haven't yet
-conda install ffmpeg
+### Requirements
+
+- Windows 10/11 or Linux.
+- [`uv`](https://docs.astral.sh/uv/) available on `PATH`.
+- `ffmpeg` on `PATH`, with the `rubberband` and `loudnorm` filters.
+- Python 3.11. The installers create the environment with `uv`.
+- Optional GPU. CPU works but is slow.
+
+### Windows
+
+```powershell
+cd path\to\F5-TTS
+.\studio\install.ps1
+.\studio\run.ps1
 ```
 
-### Install PyTorch with matched device
+Or double-click `studio\run.bat`. Open <http://127.0.0.1:7862>.
+
+Windows uses CPU unless a CUDA-capable PyTorch build is installed. ROCm is Linux-only, so a Radeon PRO W6800 is not used by PyTorch on Windows.
+
+### Linux
+
+```bash
+cd /path/to/F5-TTS
+bash studio/install.sh          # auto-detect ROCm / CUDA / CPU
+bash studio/run.sh
+```
+
+Force a backend when auto-detection is not what you want:
+
+```bash
+bash studio/install.sh --rocm       # AMD ROCm 7.2, newest matching torch pair
+bash studio/install.sh --rocm 6.2   # older RDNA1/2/3 GPUs
+bash studio/install.sh --cpu
+bash studio/install.sh --recreate   # move .venv aside and rebuild
+```
+
+If you switch between Windows and Linux, rerun the matching installer. An incompatible `.venv` is moved to `.venv.bak.<timestamp>` before the new environment is created.
+
+### Background start/stop
+
+`start.sh` and `stop.sh` work from bash on Linux and Git Bash/WSL on Windows:
+
+```bash
+bash studio/start.sh
+bash studio/stop.sh
+```
+
+The server is detached, writes `studio/data/studio.pid`, and logs to `studio/data/studio.out.log` and `studio/data/studio.err.log`. `stop.sh` also frees port 7862 when the PID file is missing or stale.
+
+### Configuration
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `F5_TTS_MODEL` | `F5TTS_v1_Base` | Checkpoint/config name passed to `F5TTS` |
+| `F5_TTS_DEVICE` | `auto` | `auto`, `cpu`, `cuda`, `rocm`, `mps`, `xpu`, or `npu` |
+| `F5_STUDIO_DATA` | `studio/data` | Uploads, jobs, and final audio |
+| `FFMPEG_BINARY` | `ffmpeg` on PATH | FFmpeg executable |
+| `F5_TTS_ROCM_VERSION` | `7.2` | ROCm wheel version used by `install.sh --rocm` |
+| `F5_TTS_TORCH_VERSION` | auto | Pin an exact torch version for `install.sh --rocm` |
+| `F5_START_TIMEOUT` | `90` | Seconds `start.sh` waits for the port |
+
+Detailed studio documentation lives in [`studio/README.md`](studio/README.md).
+
+### First launch
+
+The first model load downloads the F5-TTS v1 Base checkpoint and the Vocos vocoder from Hugging Face (about 1.5 GB). Auto-transcription additionally downloads Whisper `openai/whisper-large-v3-turbo` on first use. Both downloads are cached outside the repository.
+
+## Workflow
+
+1. **Voice reference** — Load 4–12 seconds of clean, single-speaker audio. Type the exact transcript, or use Auto-transcribe. F5-TTS internally clips longer references to 12 seconds; use the waveform selection and Trim to pick the best line.
+2. **Script** — Paste the full speech. Blank lines become paragraph breaks. Build chunks, review the split, then Generate all.
+3. **Review takes** — Play chunks, edit text or pauses, mark emphasis, mute bad sections, and regenerate only what needs another take.
+4. **Assemble** — Apply speed, pitch, loudness, gaps, and crossfades. Download WAV or MP3.
+
+### Chunk size
+
+Chunk size is measured in **characters**, including spaces and punctuation — not words. Lower values create shorter, more granular takes; higher values give the model longer passages but make regeneration coarser.
+
+## Controls
+
+### Engine settings — baked into each take
+
+| Setting | Default | Notes |
+| --- | --- | --- |
+| NFE steps | 32 | Diffusion steps. Draft 16, Balanced 24, Quality 32. Higher is slower. |
+| CFG strength | 2.0 | Classifier-free guidance. |
+| Sway sampling | −1.0 | Sway sampling coefficient. |
+| Native speed | 1.00× | Affects predicted duration at generation time. |
+| Seed | −1 | −1 generates a random seed per chunk. A fixed base seed is reproducible. |
+| Target RMS | 0.10 | Reference loudness normalization. |
+| Emphasis slowdown | 0.94× | Native speed multiplier for emphasized chunks. |
+
+Changing these only affects new or regenerated chunks. Use **Regenerate all** to apply them to an existing session.
+
+### Pacing — applied at build or assembly
+
+| Setting | Default | Notes |
+| --- | --- | --- |
+| Chunk size | 160 chars | Maximum characters per chunk. |
+| Gap | 250 ms | Default silence between chunks. |
+| Paragraph gap | 700 ms | Pause applied at blank lines. |
+| Crossfade | 0 ms | Overlap adjacent chunks when there is no gap. |
+| Emphasis gain | +1.5 dB | Gain added to emphasized chunks at assembly. |
+| Trim silence | on | Trims quiet edges of each chunk. |
+| Auto-assemble | on | Assembles the final mix when generation finishes. |
+
+### Master output — applied at assembly
+
+| Setting | Default | Notes |
+| --- | --- | --- |
+| Speed | 1.00× | Time-stretch the full mix without changing pitch. |
+| Pitch | 0.0 st | Pitch shift in semitones, formant preserved. |
+| Normalize loudness | on | Targets −16 LUFS with FFmpeg `loudnorm`. |
+| Export | WAV + MP3 | Both are generated; MP3 is 192 kbps. |
+
+Master settings only require **Reassemble final**; they do not require regenerating chunks.
+
+### Per-chunk options
+
+Each chunk card has a play button, a regenerate button, an emphasis toggle, a pause field, and an enable toggle. A normal regenerate click creates a new take with a new seed; shift-click keeps the existing seed. The same seed plus the same engine settings reproduces a take.
+
+## Script markup
+
+| Syntax | Effect |
+| --- | --- |
+| `[pause=1.5s]`, `[pause=750ms]`, `[pause]` | Pause after the preceding sentence. Default is 1 s. |
+| `<break time="2s"/>` | Same as a pause tag. |
+| `*words*`, `**words**`, `<emph>words</emph>` | Marks the chunk as emphasized: slightly slower native delivery plus gain at assembly. |
+| Blank line | Paragraph break with the paragraph gap. |
+
+Pause tags apply after the sentence they follow. A blank line adds the paragraph gap.
+
+## Long sessions
+
+- Generation runs sequentially under a single inference lock, so multiple jobs queue instead of competing for memory.
+- The UI polls a compact status endpoint and shows progress, ETA based on completed take times, and a safe cancel action.
+- Cancellation stops after the current chunk; completed chunks are kept.
+- Jobs survive page reloads and server restarts. Pending or failed chunks can be resumed with **Generate all**.
+- Chunk editing and job deletion are blocked while a run is active; cancel first.
+- The final mix is signature-checked against chunk versions and master settings, so the UI can show when a final is out of date.
+
+## Project layout
+
+```text
+F5-TTS/
+├── studio/
+│   ├── app.py            FastAPI app, REST API, static hosting
+│   ├── engine.py         model loading, chunking, jobs, stitching, FFmpeg
+│   ├── static/           HTML, CSS, vanilla JavaScript UI
+│   ├── install.ps1       Windows installer
+│   ├── install.sh        Linux installer with ROCm/CUDA/CPU detection
+│   ├── run.ps1 / run.bat Windows foreground launcher
+│   ├── run.sh            Linux foreground launcher
+│   ├── start.sh          detached start + PID/log files
+│   ├── stop.sh           stop by PID or by port
+│   └── README.md         detailed studio documentation
+├── src/f5_tts/           upstream F5-TTS model and inference code
+└── ...
+```
+
+Runtime data is written to `studio/data/` and is git-ignored:
+
+```text
+studio/data/
+├── uploads/              converted reference WAVs
+└── jobs/<id>/
+    ├── job.json
+    ├── reference.wav
+    ├── chunk_*.wav
+    ├── final_raw.wav
+    ├── final.wav
+    └── final.mp3
+```
+
+## Architecture
+
+```mermaid
+flowchart LR
+    UI["Browser SPA"] --> API["FastAPI /api"]
+    API --> JOBS["Job store + JSON"]
+    API --> ENGINE["F5-TTS engine"]
+    ENGINE --> MODEL["F5-TTS + Vocos"]
+    ENGINE --> CHUNKS["Chunk WAVs"]
+    JOBS --> CHUNKS
+    CHUNKS --> STITCH["Stitch + pauses + gain"]
+    STITCH --> FFMPEG["FFmpeg rubberband + loudnorm"]
+    FFMPEG --> FINAL["final.wav / final.mp3"]
+    API --> UI
+```
+
+The backend avoids `torchaudio.load`, which can fail on Windows when TorchCodec cannot find a shared FFmpeg build. Reference audio is decoded with FFmpeg/pydub and loaded with SoundFile instead.
+
+## REST API
 
 <details>
-<summary>NVIDIA GPU</summary>
+<summary>Endpoint summary</summary>
 
-> ```bash
-> # Install pytorch with your CUDA version, e.g.
-> pip install torch==2.8.0+cu128 torchaudio==2.8.0+cu128 --extra-index-url https://download.pytorch.org/whl/cu128
-> 
-> # And also possible previous versions, e.g.
-> pip install torch==2.4.0+cu124 torchaudio==2.4.0+cu124 --extra-index-url https://download.pytorch.org/whl/cu124
-> # etc.
-> ```
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/health` | Model, device, ASR, and job status |
+| GET | `/api/config` | Defaults, limits, and markup help |
+| POST | `/api/references` | Upload reference audio (multipart `file`) |
+| GET | `/api/references` | List references with waveform peaks |
+| GET | `/api/references/{id}/audio` | Reference WAV |
+| POST | `/api/references/{id}/trim` | Trim to `{start, end}` seconds |
+| POST | `/api/references/{id}/transcribe` | Whisper transcription |
+| POST | `/api/jobs` | Create a chunked session |
+| GET | `/api/jobs` | Session list |
+| GET | `/api/jobs/{id}` | Full session |
+| GET | `/api/jobs/{id}/status` | Compact status for polling |
+| PATCH | `/api/jobs/{id}` | Update settings, reference text, or title |
+| PATCH | `/api/jobs/{id}/chunks/{cid}` | Edit chunk text, pause, emphasis, or enabled |
+| POST | `/api/jobs/{id}/generate` | Generate pending, all, or specific chunks |
+| POST | `/api/jobs/{id}/cancel` | Stop after the current chunk |
+| POST | `/api/jobs/{id}/assemble` | Stitch and post-process |
+| GET | `/api/jobs/{id}/chunks/{cid}/audio` | Chunk WAV |
+| GET | `/api/jobs/{id}/final` | Final audio (`format`, `raw`, `download`) |
+| DELETE | `/api/jobs/{id}` | Delete session and its audio |
 
 </details>
 
-<details>
-<summary>AMD GPU</summary>
+The server binds only to `127.0.0.1` and has no authentication. Do not expose it to a network.
 
-> ```bash
-> # Install pytorch with your ROCm version (Linux only), e.g.
-> pip install torch==2.9.1+rocm7.2 torchaudio==2.9.1+rocm7.2 --extra-index-url https://download.pytorch.org/whl/rocm7.2
->
-> # For older GPUs (RDNA1/2/3 only):
-> # pip install torch==2.5.1+rocm6.2 torchaudio==2.5.1+rocm6.2 --extra-index-url https://download.pytorch.org/whl/rocm6.2
-> ```
->
-> **Note:** RDNA 3.5 and RDNA 4 GPUs (Radeon 8050S/8060S, RX 9060/9070 series) require
-> ROCm 7.x — these architectures (gfx1151/gfx1201) are not included in ROCm 6.x
-> ([6.2 compatibility matrix](https://rocm.docs.amd.com/en/docs-6.2.4/compatibility/compatibility-matrix.html) vs
-> [7.2 compatibility matrix](https://rocm.docs.amd.com/en/docs-7.2.3/compatibility/compatibility-matrix.html)).
-> Using ROCm 6.x on these GPUs causes `HIP error: invalid device function` ([#1236](https://github.com/SWivid/F5-TTS/issues/1236)).
+## Performance and GPU notes
 
-</details>
+- Generation is the bottleneck. Expect roughly 1–3 minutes per 10 seconds of output at 24–32 NFE on CPU. Draft mode (16 NFE) and smaller chunks make iteration much faster.
+- Windows PyTorch has no ROCm backend. The studio reports CPU and uses it; a Radeon PRO W6800 is not used there. The same GPU is supported by ROCm on Linux and is substantially faster than CPU.
+- On Linux, install with `--rocm` on an AMD machine. RDNA 3.5 / RDNA 4 GPUs need ROCm 7.x; older RDNA 1/2/3 cards may need ROCm 6.2.
+- For GPUs not officially supported by the installed ROCm build, set `HSA_OVERRIDE_GFX_VERSION` before launching. For example: `HSA_OVERRIDE_GFX_VERSION=11.0.0 bash studio/run.sh`.
+- F5-TTS is English/Chinese-centric. Other languages are limited by the base model and tokenizer.
 
-<details>
-<summary>Intel GPU</summary>
+## Troubleshooting
 
-> ```bash
-> # Install pytorch with your XPU version, e.g.
-> # Intel® Deep Learning Essentials or Intel® oneAPI Base Toolkit must be installed
-> pip install torch torchaudio --index-url https://download.pytorch.org/whl/test/xpu
-> 
-> # Intel GPU support is also available through IPEX (Intel® Extension for PyTorch)
-> # IPEX does not require the Intel® Deep Learning Essentials or Intel® oneAPI Base Toolkit
-> # See: https://pytorch-extension.intel.com/installation?request=platform
-> ```
+- **First run looks stuck** — the model is downloading. Watch the server log; cached loads take a few seconds.
+- **Port 7862 is already in use** — run `bash studio/stop.sh`, or close the other studio instance.
+- **Pitch or speed assembly fails** — FFmpeg is missing the `rubberband` filter. Install a full FFmpeg build.
+- **Reference audio is ignored past 12 seconds** — trim it in the Voice reference panel. F5-TTS clips longer references internally.
+- **Auto-transcribe is slow** — the first transcription downloads Whisper and runs on CPU unless a GPU backend is installed.
+- **`torch` reports CPU on a Radeon machine** — ROCm is not available on Windows; install on Linux with `--rocm` to use the GPU.
+- **Audio decode errors mentioning TorchCodec** — the backend avoids `torchaudio.load`, but FFmpeg still must be able to decode the upload. Use a standard WAV/MP3/M4A/FLAC/OGG file.
 
-</details>
+## Upstream and license
 
-<details>
-<summary>Apple Silicon</summary>
+This fork builds on [SWivid/F5-TTS](https://github.com/SWivid/F5-TTS) by Yushen CHEN and contributors. The F5-TTS model, training code, and upstream inference code remain their work; the `studio/` application is the addition in this repository. Upstream documentation, training instructions, and model details are available in the upstream repository.
 
-> ```bash
-> # Install the stable pytorch, e.g.
-> pip install torch torchaudio
-> ```
-
-</details>
-
-### Then you can choose one from below:
-
-> ### 1. As a pip package (if just for inference)
-> 
-> ```bash
-> pip install f5-tts
-> ```
-> 
-> ### 2. Local editable (if also do training, finetuning)
-> 
-> ```bash
-> git clone https://github.com/SWivid/F5-TTS.git
-> cd F5-TTS
-> # git submodule update --init --recursive  # (optional, if use bigvgan as vocoder)
-> pip install -e .
-> ```
-
-### Docker usage also available
-```bash
-# Build from Dockerfile
-docker build -t f5tts:v1 .
-
-# Run from GitHub Container Registry
-docker container run --rm -it --gpus=all --mount 'type=volume,source=f5-tts,target=/root/.cache/huggingface/hub/' -p 7860:7860 ghcr.io/swivid/f5-tts:main
-
-# Quickstart if you want to just run the web interface (not CLI)
-docker container run --rm -it --gpus=all --mount 'type=volume,source=f5-tts,target=/root/.cache/huggingface/hub/' -p 7860:7860 ghcr.io/swivid/f5-tts:main f5-tts_infer-gradio --host 0.0.0.0
-```
-
-### Runtime
-
-Deployment solution with Triton and TensorRT-LLM.
-
-#### Benchmark Results
-Decoding on a single L20 GPU, using 26 different prompt_audio & target_text pairs, 16 NFE.
-
-| Model               | Concurrency    | Avg Latency | RTF    | Mode            |
-|---------------------|----------------|-------------|--------|-----------------|
-| F5-TTS Base (Vocos) | 2              | 253 ms      | 0.0394 | Client-Server   |
-| F5-TTS Base (Vocos) | 1 (Batch_size) | -           | 0.0402 | Offline TRT-LLM |
-| F5-TTS Base (Vocos) | 1 (Batch_size) | -           | 0.1467 | Offline Pytorch |
-
-See [detailed instructions](src/f5_tts/runtime/triton_trtllm/README.md) for more information.
-
-
-## Inference
-
-- In order to achieve desired performance, take a moment to read [detailed guidance](src/f5_tts/infer).
-- By properly searching the keywords of problem encountered, [issues](https://github.com/SWivid/F5-TTS/issues?q=is%3Aissue) are very helpful.
-
-### 1. Gradio App
-
-Currently supported features:
-
-- Basic TTS with Chunk Inference
-- Multi-Style / Multi-Speaker Generation
-- Voice Chat powered by Qwen2.5-3B-Instruct
-- [Custom inference with more language support](src/f5_tts/infer/SHARED.md)
-
-```bash
-# Launch a Gradio app (web interface)
-f5-tts_infer-gradio
-
-# Specify the port/host
-f5-tts_infer-gradio --port 7860 --host 0.0.0.0
-
-# Launch a share link
-f5-tts_infer-gradio --share
-```
-
-<details>
-<summary>NVIDIA device docker compose file example</summary>
-
-```yaml
-services:
-  f5-tts:
-    image: ghcr.io/swivid/f5-tts:main
-    ports:
-      - "7860:7860"
-    environment:
-      GRADIO_SERVER_PORT: 7860
-    entrypoint: ["f5-tts_infer-gradio", "--port", "7860", "--host", "0.0.0.0"]
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-
-volumes:
-  f5-tts:
-    driver: local
-```
-
-</details>
-
-### 2. CLI Inference
-
-```bash
-# Run with flags
-# Leave --ref_text "" will have ASR model transcribe (extra GPU memory usage)
-f5-tts_infer-cli --model F5TTS_v1_Base \
---ref_audio "provide_prompt_wav_path_here.wav" \
---ref_text "The content, subtitle or transcription of reference audio." \
---gen_text "Some text you want TTS model generate for you."
-
-# Run with default setting. src/f5_tts/infer/examples/basic/basic.toml
-f5-tts_infer-cli
-# Or with your own .toml file
-f5-tts_infer-cli -c custom.toml
-
-# Multi voice. See src/f5_tts/infer/README.md
-f5-tts_infer-cli -c src/f5_tts/infer/examples/multi/story.toml
-```
-
-
-## Training
-
-### 1. With Hugging Face Accelerate
-
-Refer to [training & finetuning guidance](src/f5_tts/train) for best practice.
-
-### 2. With Gradio App
-
-```bash
-# Quick start with Gradio web interface
-f5-tts_finetune-gradio
-```
-
-Read [training & finetuning guidance](src/f5_tts/train) for more instructions.
-
-
-## [Evaluation](src/f5_tts/eval)
-
-
-## Development
-
-Use pre-commit to ensure code quality (will run linters and formatters automatically):
-
-```bash
-pip install pre-commit
-pre-commit install
-```
-
-When making a pull request, before each commit, run: 
-
-```bash
-pre-commit run --all-files
-```
-
-Note: Some model components have linting exceptions for E722 to accommodate tensor notation.
-
-
-## Acknowledgements
-
-- [E2-TTS](https://arxiv.org/abs/2406.18009) brilliant work, simple and effective
-- [Emilia](https://arxiv.org/abs/2407.05361), [WenetSpeech4TTS](https://arxiv.org/abs/2406.05763), [LibriTTS](https://arxiv.org/abs/1904.02882), [LJSpeech](https://keithito.com/LJ-Speech-Dataset/) valuable datasets
-- [lucidrains](https://github.com/lucidrains) initial CFM structure with also [bfs18](https://github.com/bfs18) for discussion
-- [SD3](https://arxiv.org/abs/2403.03206) & [Hugging Face diffusers](https://github.com/huggingface/diffusers) DiT and MMDiT code structure
-- [torchdiffeq](https://github.com/rtqichen/torchdiffeq) as ODE solver, [Vocos](https://huggingface.co/charactr/vocos-mel-24khz) and [BigVGAN](https://github.com/NVIDIA/BigVGAN) as vocoder
-- [FunASR](https://github.com/modelscope/FunASR), [faster-whisper](https://github.com/SYSTRAN/faster-whisper), [UniSpeech](https://github.com/microsoft/UniSpeech), [SpeechMOS](https://github.com/tarepan/SpeechMOS) for evaluation tools
-- [ctc-forced-aligner](https://github.com/MahmoudAshraf97/ctc-forced-aligner) for speech edit test
-- [mrfakename](https://x.com/realmrfakename) huggingface space demo ~
-- [f5-tts-mlx](https://github.com/lucasnewman/f5-tts-mlx/tree/main) Implementation with MLX framework by [Lucas Newman](https://github.com/lucasnewman)
-- [F5-TTS-ONNX](https://github.com/DakeQQ/F5-TTS-ONNX) ONNX Runtime version by [DakeQQ](https://github.com/DakeQQ)
-- [Yuekai Zhang](https://github.com/yuekaizhang) Triton and TensorRT-LLM support ~
-
-## Citation
-If our work and codebase is useful for you, please cite as:
-```
-@article{chen-etal-2024-f5tts,
-      title={F5-TTS: A Fairytaler that Fakes Fluent and Faithful Speech with Flow Matching}, 
-      author={Yushen Chen and Zhikang Niu and Ziyang Ma and Keqi Deng and Chunhui Wang and Jian Zhao and Kai Yu and Xie Chen},
-      journal={arXiv preprint arXiv:2410.06885},
-      year={2024},
-}
-```
-## License
-
-Our code is released under MIT License. The pre-trained models are licensed under the CC-BY-NC license due to the training data Emilia, which is an in-the-wild dataset. Sorry for any inconvenience this may cause.
+The repository is released under the MIT License; see [LICENSE](LICENSE). Model checkpoints downloaded from Hugging Face are subject to the terms of their respective model pages.

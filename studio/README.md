@@ -16,7 +16,7 @@ It wraps the official F5-TTS inference stack with a FastAPI backend and a custom
 
 ## Requirements
 
-- Linux or Windows. The `*.sh` scripts are Linux-only; on Windows use the PowerShell scripts. On Linux use `bash studio/install.sh`; on Windows use `.\studio\install.ps1`.
+- Linux or Windows. The `install.sh` and `run.sh` scripts target Linux; `start.sh` and `stop.sh` also work from Git Bash/WSL on Windows. On Windows use `install.ps1` and `run.ps1`/`run.bat`.
 - `ffmpeg` on `PATH` with the `rubberband` and `loudnorm` filters. On Debian/Ubuntu: `sudo apt install ffmpeg`.
 - Python 3.11 is provisioned automatically by `uv`.
 - An AMD (ROCm) GPU is optional but strongly recommended on Linux. ROCm is Linux-only. CPU generation is slow: roughly 1–3 minutes per 10 seconds of audio at 24–32 steps. Draft mode (16 NFE) is much faster.

@@ -11,9 +11,15 @@ if (-not (Test-Path -LiteralPath $uv)) {
     $uv = "uv"
 }
 Set-Location -LiteralPath $root
-if (-not (Test-Path -LiteralPath (Join-Path $venv "Scripts\python.exe"))) {
+$py = Join-Path $venv "Scripts\python.exe"
+if ((Test-Path -LiteralPath $venv) -and (-not (Test-Path -LiteralPath $py))) {
+    $backup = "$venv.bak.$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())"
+    Move-Item -LiteralPath $venv -Destination $backup
+    Write-Host "Moved the existing non-Windows .venv to $backup"
+}
+if (-not (Test-Path -LiteralPath $py)) {
     & $uv venv --python 3.11 $venv
 }
-& $uv pip install --python (Join-Path $venv "Scripts\python.exe") -e $root
-& $uv pip install --python (Join-Path $venv "Scripts\python.exe") "fastapi>=0.115" "uvicorn[standard]>=0.30" "python-multipart>=0.0.9"
+& $uv pip install --python $py -e $root
+& $uv pip install --python $py "fastapi>=0.115" "uvicorn[standard]>=0.30" "python-multipart>=0.0.9"
 Write-Host "Installed. Start the studio with .\run.ps1"
