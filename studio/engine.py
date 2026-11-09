@@ -24,6 +24,37 @@ from f5_tts.device_utils import get_default_device
 from f5_tts.infer.utils_infer import infer_batch_process, preprocess_ref_audio_text, transcribe
 from f5_tts.model.utils import seed_everything
 
+
+def _torchcodec_works() -> bool:
+    """torchcodec only publishes CUDA wheels, so importing it on a ROCm/CPU build raises
+    (e.g. a missing libnvrtc) even though transformers reports it as installed."""
+    try:
+        import torchcodec  # noqa: F401
+    except (ImportError, OSError):
+        return False
+    return True
+
+
+def _patch_torchcodec_if_broken() -> None:
+    """transformers decides torchcodec availability from package metadata and then imports it
+    inside its ASR pipeline, which crashes transcription when the wheel cannot load. When the
+    import fails, make transformers treat torchcodec as unavailable so it falls back to ffmpeg."""
+    if _torchcodec_works():
+        return
+
+    def _unavailable() -> bool:
+        return False
+
+    import transformers.audio_utils as _audio_utils
+    import transformers.pipelines.automatic_speech_recognition as _asr_pipeline
+    import transformers.utils.import_utils as _import_utils
+
+    for module in (_audio_utils, _asr_pipeline, _import_utils):
+        module.is_torchcodec_available = _unavailable
+
+
+_patch_torchcodec_if_broken()
+
 STUDIO_DIR = Path(__file__).resolve().parent
 DATA_DIR = Path(os.environ.get("F5_STUDIO_DATA", STUDIO_DIR / "data"))
 UPLOAD_DIR = DATA_DIR / "uploads"

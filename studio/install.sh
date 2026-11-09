@@ -138,6 +138,10 @@ install_torch
 "$UV" pip install --python "$PY" -e "$ROOT_DIR"
 "$UV" pip install --python "$PY" "fastapi>=0.115" "uvicorn[standard]>=0.30" "python-multipart>=0.0.9"
 
+# torchcodec only ships CUDA wheels and fails to load on ROCm/CPU builds (missing libnvrtc);
+# transformers falls back to ffmpeg, so remove it to keep transcription working.
+"$UV" pip uninstall --python "$PY" torchcodec 2>/dev/null || true
+
 "$PY" - <<'PY'
 import torch
 backend = "rocm" if getattr(torch.version, "hip", None) else ("cuda" if torch.cuda.is_available() else "cpu")

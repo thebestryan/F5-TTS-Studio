@@ -28,6 +28,7 @@ const state = {
   audioKey: null,
   audioType: null,
   audioId: null,
+  refPosition: null,
   playing: false,
   pollTimer: null,
   polling: false,
@@ -249,14 +250,19 @@ function bindStatic() {
   });
   els.audioEl.addEventListener("pause", () => {
     state.playing = false;
+    if (state.audioType === "ref") state.refPosition = els.audioEl.currentTime;
     updatePlayButtons();
   });
   els.audioEl.addEventListener("ended", () => {
     state.playing = false;
+    if (state.audioType === "ref") state.refPosition = els.audioEl.currentTime;
     updatePlayButtons();
     drawAll();
   });
-  els.audioEl.addEventListener("timeupdate", () => updateTimeLabels());
+  els.audioEl.addEventListener("timeupdate", () => {
+    if (state.audioType === "ref") state.refPosition = els.audioEl.currentTime;
+    updateTimeLabels();
+  });
   els.audioEl.addEventListener("loadedmetadata", () => updateTimeLabels());
 
   window.addEventListener("resize", () => requestAnimationFrame(drawAll));
@@ -507,8 +513,19 @@ async function uploadReference(file) {
 }
 
 function setReference(meta) {
+  const prevId = state.reference?.id;
   state.reference = meta;
   state.selection = null;
+  if (meta.id !== prevId) {
+    state.refPosition = null;
+    if (state.audioType === "ref") {
+      els.audioEl.pause();
+      els.audioEl.removeAttribute("src");
+      state.audioKey = null;
+      state.audioType = null;
+      state.audioId = null;
+    }
+  }
   localStorage.setItem(LAST_REF_KEY, meta.id);
   if (!els.refText.value.trim() && localStorage.getItem(REFTEXT_KEY)) {
     els.refText.value = localStorage.getItem(REFTEXT_KEY);
@@ -536,7 +553,7 @@ function renderReference() {
     els.refName.textContent = "No reference loaded";
     els.refWarning.hidden = true;
     els.trimBtn.disabled = true;
-    els.selLabel.textContent = "Drag the waveform to select a region";
+    els.selLabel.textContent = "Drag to select a region · click to seek the playhead";
     drawRefWave();
     return;
   }
@@ -557,7 +574,7 @@ function renderReference() {
 function updateSelectionUi() {
   if (!state.selection || !state.reference) {
     els.trimBtn.disabled = true;
-    els.selLabel.textContent = "Drag the waveform to select a region";
+    els.selLabel.textContent = "Drag to select a region · click to seek the playhead";
     return;
   }
   const { start, end } = state.selection;
@@ -565,24 +582,48 @@ function updateSelectionUi() {
   els.trimBtn.disabled = end - start < 0.2;
 }
 
+function timeFromEvent(canvas, e) {
+  const rect = canvas.getBoundingClientRect();
+  const duration = state.reference?.duration || 0;
+  if (!duration) return null;
+  return clamp(((e.clientX - rect.left) / rect.width) * duration, 0, duration);
+}
+
+function nearRefPlayhead(canvas, e) {
+  const rect = canvas.getBoundingClientRect();
+  const duration = state.reference?.duration || 0;
+  const head = refPlayheadTime();
+  if (!duration || head == null) return false;
+  return Math.abs((head / duration) * rect.width - (e.clientX - rect.left)) <= 10;
+}
+
 function setupSelection(canvas) {
   canvas.addEventListener("pointerdown", (e) => {
     if (!state.reference) return;
-    const rect = canvas.getBoundingClientRect();
-    const duration = state.reference.duration || 0;
-    if (!duration) return;
-    const t = clamp(((e.clientX - rect.left) / rect.width) * duration, 0, duration);
-    state.drag = { anchor: t, moved: false };
-    state.selection = { start: t, end: t };
+    const t = timeFromEvent(canvas, e);
+    if (t == null) return;
     canvas.setPointerCapture(e.pointerId);
+    if (nearRefPlayhead(canvas, e)) {
+      state.drag = { mode: "seek" };
+      seekRef(t);
+      return;
+    }
+    state.drag = { mode: "select", anchor: t, moved: false };
+    state.selection = { start: t, end: t };
     updateSelectionUi();
     drawRefWave();
   });
   canvas.addEventListener("pointermove", (e) => {
-    if (!state.drag || !state.reference) return;
-    const rect = canvas.getBoundingClientRect();
-    const duration = state.reference.duration || 0;
-    const t = clamp(((e.clientX - rect.left) / rect.width) * duration, 0, duration);
+    if (!state.drag) {
+      canvas.style.cursor = nearRefPlayhead(canvas, e) ? "ew-resize" : "crosshair";
+      return;
+    }
+    const t = timeFromEvent(canvas, e);
+    if (t == null) return;
+    if (state.drag.mode === "seek") {
+      seekRef(t);
+      return;
+    }
     if (Math.abs(t - state.drag.anchor) > 0.02) state.drag.moved = true;
     state.selection = {
       start: Math.min(state.drag.anchor, t),
@@ -591,17 +632,51 @@ function setupSelection(canvas) {
     updateSelectionUi();
     drawRefWave();
   });
-  const finish = () => {
+  const finish = (allowSeek) => {
     if (!state.drag) return;
-    const moved = state.drag.moved;
+    const drag = state.drag;
     state.drag = null;
-    if (!moved) state.selection = null;
-    else if (state.selection && state.selection.end - state.selection.start < 0.05) state.selection = null;
+    if (drag.mode === "seek") return;
+    if (!drag.moved) {
+      state.selection = null;
+      if (allowSeek) seekRef(drag.anchor);
+    } else if (state.selection && state.selection.end - state.selection.start < 0.05) {
+      state.selection = null;
+    }
     updateSelectionUi();
     drawRefWave();
   };
-  canvas.addEventListener("pointerup", finish);
-  canvas.addEventListener("pointercancel", finish);
+  canvas.addEventListener("pointerup", () => finish(true));
+  canvas.addEventListener("pointercancel", () => finish(false));
+}
+
+function refPlayheadTime() {
+  if (state.audioType === "ref" && els.audioEl.src) return els.audioEl.currentTime || 0;
+  return state.refPosition;
+}
+
+function seekRef(t) {
+  const ref = state.reference;
+  if (!ref) return;
+  const duration = ref.duration || 0;
+  if (!duration) return;
+  const target = clamp(t, 0, Math.max(0, duration - 0.02));
+  const apply = () => {
+    els.audioEl.currentTime = target;
+    state.refPosition = target;
+    updateTimeLabels();
+    drawRefWave();
+  };
+  if (state.audioKey !== "ref:" || !els.audioEl.src) {
+    if (state.audioKey && state.audioType !== "ref") els.audioEl.pause();
+    els.audioEl.src = referenceUrl();
+    state.audioKey = "ref:";
+    state.audioType = "ref";
+    state.audioId = null;
+    els.audioEl.addEventListener("loadedmetadata", apply, { once: true });
+  } else {
+    apply();
+  }
 }
 
 async function trimSelection() {
@@ -756,6 +831,7 @@ function loadJob(job) {
     };
   }
   state.selection = null;
+  state.refPosition = null;
   renderReference();
   updateJobChip();
   renderChunks();
@@ -1337,11 +1413,10 @@ function drawAll() {
 
 function drawRefWave() {
   const ref = state.reference;
-  const playing = state.audioType === "ref" && state.playing;
   drawWave(els.refCanvas, ref?.peaks || [], {
     duration: ref?.duration || 0,
     selection: state.selection,
-    playhead: playing && ref ? els.audioEl.currentTime : null,
+    playhead: refPlayheadTime(),
     accent: "#e3a85b",
   });
 }
@@ -1510,6 +1585,7 @@ function newSession(silent = false) {
   state.voiceDirty = false;
   state.clearVoiceOnIdle = false;
   state.audioKey = null;
+  state.refPosition = null;
   state.lastCurrent = null;
   localStorage.removeItem(LAST_JOB_KEY);
   els.script.value = "";

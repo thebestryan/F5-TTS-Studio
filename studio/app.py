@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.middleware.gzip import GZipMiddleware
@@ -442,12 +442,27 @@ def unhandled(request, exc: Exception):
     return JSONResponse(status_code=500, content={"detail": f"{type(exc).__name__}: {exc}"})
 
 
-app.mount("/static", StaticFiles(directory=str(engine.STATIC_DIR)), name="static")
+class NoCacheStaticFiles(StaticFiles):
+    def file_response(self, *args, **kwargs):
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
+app.mount("/static", NoCacheStaticFiles(directory=str(engine.STATIC_DIR)), name="static")
 
 
 @app.get("/")
-def index() -> FileResponse:
-    return _no_store(engine.STATIC_DIR / "index.html", "text/html")
+def index() -> HTMLResponse:
+    html = (engine.STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    for name in ("app.js", "styles.css"):
+        asset = engine.STATIC_DIR / name
+        try:
+            stamp = int(asset.stat().st_mtime)
+        except OSError:
+            continue
+        html = html.replace(f"/static/{name}", f"/static/{name}?v={stamp}")
+    return HTMLResponse(html, headers={"Cache-Control": "no-store, max-age=0"})
 
 
 @app.get("/favicon.ico")
