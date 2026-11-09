@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F5-TTS Studio</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<svg class="sprite" aria-hidden="true">
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4m0 0L7 9m5-5 5 5M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v12m0 0 5-5m-5 5-5-5M5 20h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-scissors" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="6" cy="18" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8.2 7.6 20 18M20 6 8.2 16.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v6M14 11v6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3v4m0 10v4M3 12h4m10 0h4M5.6 5.6l2.8 2.8m7.2 7.2 2.8 2.8m0-12.8-2.8 2.8m-7.2 7.2-2.8 2.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+</svg>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">F5</span>
+    <span class="brand-word">TTS<span class="brand-sub">/ studio</span></span>
+  </div>
+  <div class="top-meta">
+    <div class="chip" id="modelChip" title="Model status"><span class="status-dot" id="modelDot"></span><span id="modelLabel">Connecting…</span></div>
+    <div class="chip ghost" id="deviceChip" title="PyTorch device and backend (ROCm, CPU, …).">cpu</div>
+    <div class="chip ghost" id="jobChip" hidden></div>
+  </div>
+  <div class="top-actions">
+    <button class="btn ghost small" id="newSessionBtn" type="button">New session</button>
+    <button class="icon-btn" id="helpBtn" type="button" aria-label="Help">?</button>
+  </div>
+</header>
+
+<main class="layout">
+  <section class="panel ref-panel">
+    <div class="panel-head">
+      <span class="step">01</span>
+      <div class="panel-title"><h2>Voice reference</h2><p>4–12 s of clean, single-speaker speech</p></div>
+    </div>
+    <div class="panel-body">
+      <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Upload reference audio">
+        <input type="file" id="refFile" accept="audio/*,.wav,.mp3,.m4a,.flac,.ogg,.opus,.webm" hidden>
+        <div class="drop-idle" id="dropIdle">
+          <svg class="icon lg"><use href="#i-upload"/></svg>
+          <strong>Drop a voice clip</strong>
+          <span>or click to browse</span>
+          <span class="dim">wav, mp3, m4a, flac, ogg</span>
+        </div>
+        <div class="drop-loaded" id="dropLoaded" hidden>
+          <canvas id="refCanvas" class="wave" height="120" aria-label="Reference waveform"></canvas>
+          <div class="wave-meta">
+            <button class="icon-btn" id="refPlayBtn" type="button" aria-label="Play reference"><svg class="icon"><use href="#i-play"/></svg></button>
+            <span id="refTime" class="mono">0:00 / 0:00</span>
+            <span class="spacer"></span>
+            <span id="refFormat" class="dim mono">24 kHz · mono</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="ref-row">
+        <div class="truncate" id="refName">No reference loaded</div>
+        <button class="btn ghost small" id="refChangeBtn" type="button">Replace</button>
+      </div>
+      <div class="alert warn compact" id="refWarning" hidden></div>
+      <div class="selection-row">
+        <span class="dim" id="selLabel">Drag the waveform to select a region</span>
+        <button class="btn ghost small" id="trimBtn" type="button" disabled><svg class="icon"><use href="#i-scissors"/></svg>Trim</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="field-head">
+        <label for="refText">Reference transcript</label>
+        <button class="btn ghost small" id="transcribeBtn" type="button"><svg class="icon"><use href="#i-spark"/></svg>Auto-transcribe</button>
+      </div>
+      <textarea id="refText" rows="4" placeholder="Type the exact words spoken in the reference clip."></textarea>
+      <div class="field-foot">
+        <select id="asrLang" class="mini-select" aria-label="Transcription language">
+          <option value="auto">Auto language</option>
+          <option value="en">English</option>
+          <option value="zh">Chinese</option>
+          <option value="ja">Japanese</option>
+          <option value="ko">Korean</option>
+          <option value="fr">French</option>
+          <option value="de">German</option>
+          <option value="es">Spanish</option>
+          <option value="it">Italian</option>
+          <option value="pt">Portuguese</option>
+          <option value="ru">Russian</option>
+          <option value="hi">Hindi</option>
+          <option value="ar">Arabic</option>
+        </select>
+        <span class="dim mono" id="refTextCount">0 chars</span>
+      </div>
+      <p class="tip">The transcript must match the clip word-for-word. Auto-transcribe downloads Whisper on first use and can take a few minutes on CPU.</p>
+    </div>
+  </section>
+
+  <section class="panel script-panel">
+    <div class="panel-head">
+      <span class="step">02</span>
+      <div class="panel-title"><h2>Script</h2><p>Paste the full speech; it is split automatically</p></div>
+      <div class="script-stats"><span id="wordCount">0 words</span><span id="charCount">0 chars</span></div>
+    </div>
+    <div class="panel-body script-body">
+      <div class="script-tools">
+        <label class="btn ghost small file-btn">Load .txt<input type="file" id="txtFile" accept=".txt,text/plain" hidden></label>
+        <button class="btn ghost small" type="button" data-insert="[pause=1s]">+ Pause</button>
+        <button class="btn ghost small" type="button" data-insert="*emphasis*">+ Emphasis</button>
+        <button class="btn ghost small" type="button" id="clearScript">Clear</button>
+        <span class="spacer"></span>
+        <span class="dim mono" id="scriptTimeEstimate"></span>
+      </div>
+      <textarea id="script" rows="10" spellcheck="true" placeholder="Paste a long speech, article, chapter, or narration. Use blank lines for paragraphs and [pause=1.5s] for deliberate beats."></textarea>
+      <div class="build-row">
+        <button class="btn primary" id="buildBtn" type="button">Build chunks</button>
+        <span class="dim" id="buildHint">Creates a session and splits at sentence boundaries.</span>
+      </div>
+      <div class="alert info rebuild-banner" id="rebuildBanner" hidden>
+        <span id="rebuildText">Script or voice changed.</span>
+        <button class="btn small" id="rebuildBtn" type="button">Rebuild session</button>
+      </div>
+
+      <div class="chunks-head">
+        <div class="chunks-title"><h3>Chunks</h3><span class="dim" id="chunksMeta">—</span></div>
+        <div class="chunk-actions">
+          <button class="btn ghost small" id="cancelBtn" type="button" hidden>Cancel</button>
+          <button class="btn ghost small" id="regenAllBtn" type="button" disabled>Regenerate all</button>
+          <button class="btn primary small" id="generateBtn" type="button" disabled>Generate all</button>
+        </div>
+      </div>
+
+      <div class="progress-wrap" id="progressWrap" hidden>
+        <div class="progress-line"><span id="progressText">Waiting</span><span class="mono dim" id="etaText"></span></div>
+        <div class="progress-track"><div class="progress-bar" id="progressBar"></div></div>
+      </div>
+
+      <div class="chunk-list" id="chunkList">
+        <div class="empty-state" id="chunkEmpty">
+          <svg class="icon lg"><use href="#i-spark"/></svg>
+          <strong>No chunks yet</strong>
+          <span>Build chunks to review and regenerate the split before generating.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <aside class="panel master-panel">
+    <div class="panel-head">
+      <span class="step">03</span>
+      <div class="panel-title"><h2>Master</h2><p>Engine, pacing and final polish</p></div>
+      <button class="btn ghost small" id="resetSettings" type="button">Reset</button>
+    </div>
+    <div class="panel-body master-body">
+      <details class="control-section" open>
+        <summary>Engine <span class="meta">applies on generation</span></summary>
+        <div class="preset-row">
+          <button class="mini-btn" type="button" data-preset="16">Draft · 16</button>
+          <button class="mini-btn" type="button" data-preset="24">Balanced · 24</button>
+          <button class="mini-btn" type="button" data-preset="32">Quality · 32</button>
+        </div>
+        <div class="control">
+          <div class="control-label"><label for="nfe_step">NFE steps</label><output data-out="nfe_step">32</output></div>
+          <input id="nfe_step" type="range" min="4" max="64" step="2" data-setting="nfe_step" data-kind="int" title="Diffusion steps: more is slower but more detailed">
+        </div>
+        <div class="control-grid">
+          <div class="control">
+            <div class="control-label"><label for="cfg_strength">CFG</label><output data-out="cfg_strength">2.0</output></div>
+            <input id="cfg_strength" type="range" min="0" max="6" step="0.1" data-setting="cfg_strength" title="Classifier-free guidance strength">
+          </div>
+          <div class="control">
+            <div class="control-label"><label for="sway_sampling_coef">Sway</label><output data-out="sway_sampling_coef">-1.0</output></div>
+            <input id="sway_sampling_coef" type="range" min="-3" max="3" step="0.1" data-setting="sway_sampling_coef" title="Sway sampling coefficient">
+          </div>
+          <div class="control">
+            <div class="control-label"><label for="speed">Native speed</label><output data-out="speed">1.00</output></div>
+            <input id="speed" type="range" min="0.5" max="2" step="0.01" data-setting="speed" title="Changes predicted duration at generation time">
+          </div>
+          <div class="control">
+            <div class="control-label"><label for="target_rms">Target RMS</label><output data-out="target_rms">0.10</output></div>
+            <input id="target_rms" type="range" min="0.01" max="0.5" step="0.01" data-setting="target_rms" title="Reference loudness normalization">
+          </div>
+        </div>
+        <div class="control seed-control">
+          <div class="control-label"><label for="seed">Seed</label>
+            <span class="inline-actions">
+              <button class="mini-btn" id="diceBtn" type="button" title="Pick a random base seed">RND</button>
+              <button class="mini-btn" id="autoSeedBtn" type="button" title="Use a random seed per chunk">AUTO</button>
+            </span>
+          </div>
+          <input id="seed" type="number" min="-1" max="2147483647" step="1" data-setting="seed" data-kind="int">
+          <p class="control-help">-1 means random per chunk. Changing the seed changes the performance.</p>
+        </div>
+        <div class="alert warn compact" id="voiceDirtyNote" hidden>Voice settings changed. Regenerate chunks to apply them.</div>
+      </details>
+
+      <details class="control-section" open>
+        <summary>Pacing <span class="meta">applies on build</span></summary>
+        <div class="control-grid">
+          <div class="control">
+            <div class="control-label"><label for="max_chars">Chunk size</label><output data-out="max_chars">160 chars</output></div>
+            <input id="max_chars" type="range" min="60" max="500" step="10" data-setting="max_chars" data-kind="int" title="Maximum characters per chunk">
+          </div>
+          <div class="control">
+            <div class="control-label"><label for="pause_ms">Gap</label><output data-out="pause_ms">250 ms</output></div>
+            <input id="pause_ms" type="range" min="0" max="3000" step="50" data-setting="pause_ms" data-kind="int" title="Default silence between chunks">
+          </div>
+          <div class="control">
+            <div class="control-label"><label for="paragraph_pause_ms">Paragraph gap</label><output data-out="paragraph_pause_ms">700 ms</output></div>
+            <input id="paragraph_pause_ms" type="range" min="0" max="5000" step="50" data-setting="paragraph_pause_ms" data-kind="int" title="Extra pause at blank lines">
+          </div>
+          <div class="control">
+            <div class="control-label"><label for="crossfade_ms">Crossfade</label><output data-out="crossfade_ms">0 ms</output></div>
+            <input id="crossfade_ms" type="range" min="0" max="500" step="10" data-setting="crossfade_ms" data-kind="int" title="Overlap adjacent chunks when there is no gap">
+          </div>
+          <div class="control">
+            <div class="control-label"><label for="emphasis_slowdown">Emphasis slow</label><output data-out="emphasis_slowdown">0.94×</output></div>
+            <input id="emphasis_slowdown" type="range" min="0.8" max="1.05" step="0.01" data-setting="emphasis_slowdown" title="Native speed multiplier for emphasized chunks">
+          </div>
+          <div class="control">
+            <div class="control-label"><label for="emphasis_gain_db">Emphasis gain</label><output data-out="emphasis_gain_db">+1.5 dB</output></div>
+            <input id="emphasis_gain_db" type="range" min="-6" max="8" step="0.5" data-setting="emphasis_gain_db" title="Gain applied to emphasized chunks at assembly">
+          </div>
+        </div>
+        <label class="switch"><input type="checkbox" id="trim_silence" data-setting="trim_silence"><span class="track"></span><span>Trim silence at chunk edges</span></label>
+        <label class="switch"><input type="checkbox" id="auto_assemble" data-setting="auto_assemble"><span class="track"></span><span>Auto-assemble when generation finishes</span></label>
+      </details>
+
+      <details class="control-section" open>
+        <summary>Master output <span class="meta">post-processing</span></summary>
+        <div class="control-grid">
+          <div class="control">
+            <div class="control-label"><label for="post_speed">Speed</label><output data-out="post_speed">1.00×</output></div>
+            <input id="post_speed" type="range" min="0.5" max="2" step="0.01" data-setting="post_speed" title="Time-stretch the final mix without changing pitch">
+          </div>
+          <div class="control">
+            <div class="control-label"><label for="post_pitch">Pitch</label><output data-out="post_pitch">0.0 st</output></div>
+            <input id="post_pitch" type="range" min="-12" max="12" step="0.5" data-setting="post_pitch" title="Shift pitch in semitones, preserving formants">
+          </div>
+        </div>
+        <label class="switch"><input type="checkbox" id="normalize_loudness" data-setting="normalize_loudness"><span class="track"></span><span>Normalize loudness to −16 LUFS</span></label>
+        <p class="control-help">Speed and pitch use FFmpeg Rubber Band on the stitched mix. They do not require regeneration.</p>
+      </details>
+
+      <details class="control-section sessions">
+        <summary>Sessions <span class="meta">saved on disk</span></summary>
+        <div class="session-list" id="sessionList"></div>
+      </details>
+    </div>
+    <div class="panel-footer">
+      <div class="final-card">
+        <div class="final-head"><h3>Final audio</h3><span class="badge" id="finalBadge" hidden></span></div>
+        <div class="final-empty" id="finalEmpty">Generate chunks to create a final mix.</div>
+        <div id="finalLoaded" hidden>
+          <canvas id="finalCanvas" class="wave" height="100" aria-label="Final mix waveform"></canvas>
+          <div class="transport">
+            <button class="icon-btn" id="finalPlayBtn" type="button" aria-label="Play final audio"><svg class="icon"><use href="#i-play"/></svg></button>
+            <span class="mono" id="finalTime">0:00 / 0:00</span>
+            <span class="spacer"></span>
+            <a class="btn ghost small" id="dlWav" href="#" download>WAV</a>
+            <a class="btn ghost small" id="dlMp3" href="#" download>MP3</a>
+          </div>
+          <div class="final-meta">
+            <span class="dim mono" id="finalDuration"></span>
+            <a class="linkish" id="dlRaw" href="#" download>raw, no post</a>
+          </div>
+          <p class="alert warn compact" id="finalStale" hidden>Chunks or master settings changed. Reassemble to update.</p>
+        </div>
+        <button class="btn primary wide" id="assembleBtn" type="button" disabled>Assemble final</button>
+        <p class="control-help">Assembles generated chunks with gaps and emphasis gain, then applies speed, pitch and loudness.</p>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<audio id="audioEl" preload="metadata"></audio>
+
+<dialog id="helpDialog" class="help-dialog">
+  <div class="help-head"><h2>Studio notes</h2><button class="icon-btn" id="helpClose" type="button" aria-label="Close"><svg class="icon"><use href="#i-close"/></svg></button></div>
+  <div class="help-body">
+    <h3>Workflow</h3>
+    <ol>
+      <li>Load a clean 4–12 s voice clip and type its exact transcript.</li>
+      <li>Paste the speech. Use blank lines for paragraphs.</li>
+      <li>Build chunks, review the split, then Generate all. Long scripts run chunk by chunk.</li>
+      <li>Assemble final applies gaps, pitch and speed. Download WAV or MP3.</li>
+    </ol>
+    <h3>Markup</h3>
+    <table>
+      <tr><td><code>[pause=1.5s]</code></td><td>Insert silence after the sentence. Also accepts <code>[pause=750ms]</code> or <code>&lt;break time="2s"/&gt;</code>.</td></tr>
+      <tr><td><code>*words*</code> / <code>**words**</code></td><td>Mark the sentence as emphasized: slightly slower native delivery and extra gain at assembly.</td></tr>
+      <tr><td>Blank line</td><td>Paragraph break with the paragraph gap.</td></tr>
+    </table>
+    <h3>Good to know</h3>
+    <ul>
+      <li>F5-TTS clips reference audio to 12 seconds. Trim to the strongest, cleanest line.</li>
+      <li>Chunks are generated sequentially. A chunk can be edited, regenerated, muted, or assigned its own pause.</li>
+      <li>Native speed, NFE, CFG, sway, seed and RMS are baked into a take. Master speed and pitch are applied later.</li>
+      <li>ROCm (AMD Radeon) is Linux-only. Install with <code>studio/install.sh --rocm</code> and the studio uses the GPU automatically; force it with <code>F5_TTS_DEVICE=rocm</code> or fall back with <code>F5_TTS_DEVICE=cpu</code>. On Windows the studio runs on CPU.</li>
+      <li>Shift-click a chunk's regenerate button to keep its seed; normal click produces a new take.</li>
+      <li>Shortcuts: Ctrl/Cmd+Enter generate, Ctrl/Cmd+S assemble, Esc stop playback.</li>
+    </ul>
+  </div>
+</dialog>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
